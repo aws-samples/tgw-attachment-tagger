@@ -1,0 +1,54 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+---
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template to deploy the role used by the Transit Gateway Attachment Tagger to query AWS Organizations'
+
+Parameters:
+  NetworkingAccountId:
+    Description: The AWS Account Id which contains the TGW Attachment Tagger
+    Type: String
+    Default: "123456789012"
+    AllowedPattern: "\\d{12}"
+    ConstraintDescription: Enter a valid AWS Account Id
+
+Resources:
+
+  TargetLambdaOrganizationsAccountQueryRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: tgw-attachment-tagger-organization-query-role
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                AWS: !Sub arn:aws:iam::${NetworkingAccountId}:role/tgw-attachment-tagger-organizations-lambda-role
+              Action: sts:AssumeRole
+        Path: /
+        Policies:
+          - PolicyName: tgw-attachment-tagger-organization-query-inline-policy
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - organizations:ListRoots
+                    - organizations:ListAccounts
+                    - organizations:ListOrganizationalUnitsForParent
+                    - organizations:ListChildren
+                  Resource: "*"
