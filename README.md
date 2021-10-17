@@ -18,6 +18,14 @@ The solution is delivered via two AWS CloudFormation templates. The main stack i
 
 The second stack is deployed into the AWS Organizations management account. This stack deploys an IAM role with permissions to four *List* APIs in the organizations service - this role trusts a role from the first stack to perform sts:AssumeRole.
 
+### Step Function Logic
+
+The workflow for the Step Function is detailed below:
+
+![Step Function Workflow](https://github.com/aws-samples/tgw-attachment-tagger/blob/main/docs/step-function-workflow.png)
+
+
+
 ### Usage Instructions
 
 1. Obtain pre-requisite information
@@ -27,12 +35,15 @@ The second stack is deployed into the AWS Organizations management account. This
 * The AWS regions which you wish to process with this solution
 * The Ids of any Transit Gateways which you wish to exclude from processing
 
-2. Deploy the main stack (tgw-attachment-tagger-main-stack.yaml) using CloudFormation in the AWS account which contains the Transit Gateways. Populate the stack parameters with the information gathered in the first step. Note that this stack must be deployed before the Organizations stack.
+2. Deploy the main stack (tgw-attachment-tagger-main-stack.yaml) using CloudFormation in the AWS account which contains the Transit Gateways. Populate the stack parameters with the information gathered in the first step. *Note that this stack must be deployed before the Organizations stack, the role is translated to a specific Principal ID as is explained [here](https://docs.amazonaws.cn/en_us/IAM/latest/UserGuide/id_roles_create_for-user.html)*.
 
 3. Deploy the organizations stack (tgw-attachment-tagger-organizations-stack.yaml) using CloudFormation in the AWS Organizations management account.
 
 The solution will run each day at 06:00 UTC. Alternatively you may manually trigger the solution by executing the "tgw-attachment-tagger-state-machine" from the Step Functions console. The Step Function needs no specific input, so any valid JSON may be used.
 
+The solution generates Name tags as shown in the example below:
+
+[screengrab](https://github.com/aws-samples/tgw-attachment-tagger/blob/main/docs/sample-screengrab.png)
 
 ## Security
 
