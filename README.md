@@ -4,7 +4,7 @@
 
 AWS Transit Gateway (TGW) can be shared via AWS Resource Access Manager across AWS account boundaries. When creating TGW attachments across AWS account boundaries, attachments are created without a Name tag - which can make identifying attachments time consuming. 
 
-This solution provides an automated mechanism to gather information about each TGW attachment for accounts within an AWS Organization, including looking up the Classless Inter-Domain Routing (CIDR) range from the TGW Route Table. The solution will then apply a Name tag in the form of "CIDR-AccountName" to the attachment within the AWS account which owns the TGW.
+This solution provides an automated mechanism to gather information about each TGW attachment for accounts within an AWS Organization, including looking up the Classless Inter-Domain Routing (CIDR) range from the TGW Route Table. The solution will then apply a Name tag in the form of **CIDR-AccountName** to the attachment within the AWS account which owns the TGW.
 
 This solution can be used alongside a solution such as the *[Serverless Transit Network Orchestrator](https://aws.amazon.com/solutions/implementations/serverless-transit-network-orchestrator/)* from the AWS Solutions Library, which enables the automated creation of TGW attachments at scale.
 
@@ -43,7 +43,7 @@ The solution will run each day at 06:00 UTC. Alternatively you may manually trig
 
 The solution generates Name tags as shown in the example below:
 
-[screengrab](https://github.com/aws-samples/tgw-attachment-tagger/blob/main/docs/sample-screengrab.png)
+![screengrab](https://github.com/aws-samples/tgw-attachment-tagger/blob/main/docs/sample-screengrab.png)
 
 ## Security
 
