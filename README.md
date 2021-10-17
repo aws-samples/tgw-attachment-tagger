@@ -6,11 +6,17 @@ AWS Transit Gateway (TGW) can be shared via AWS Resource Access Manager across A
 
 This solution provides an automated mechanism to gather information about each TGW attachment for accounts within an AWS Organization, including looking up the Classless Inter-Domain Routing (CIDR) range from the TGW Route Table. The solution will then apply a Name tag in the form of "CIDR-AccountName" to the attachment within the AWS account which owns the TGW.
 
-This solution can be used alongside a solution such as the Serverless Transit Network Orchestrator from the AWS Solutions Library, which enables the automated creation of TGW attachments at scale.
+This solution can be used alongside a solution such as the *[Serverless Transit Network Orchestrator](https://aws.amazon.com/solutions/implementations/serverless-transit-network-orchestrator/)* from the AWS Solutions Library, which enables the automated creation of TGW attachments at scale.
 
-### Detailed Documentation 
+### Solution Architecture
 
-See APG document - link TBC
+The solution architecture is shown below:
+
+![Solution Architecture](https://github.com/aws-samples/tgw-attachment-tagger/blob/main/docs/solution-architecture.png)
+
+The solution is delivered via two AWS CloudFormation templates. The main stack is deployed in a shared networking account which contains the AWS Transit Gateways. This stack deploys a Step Function, four Lambdas plus their associated IAM Roles & finally a CloudWatch event to trigger the Step Function on a schedule. 
+
+The second stack is deployed into the AWS Organizations management account. This stack deploys an IAM role with permissions to four *List* APIs in the organizations service - this role trusts a role from the first stack to perform sts:AssumeRole.
 
 ### Usage Instructions
 
