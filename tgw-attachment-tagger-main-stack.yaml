@@ -49,6 +49,12 @@ Metadata:
 
 Resources:
 
+  LambdaOrganizationsAccountQueryLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: '/aws/lambda/tgw-tagger-organizations-account-query'
+      RetentionInDays: 90
+
   LambdaOrganizationsAccountQueryRole:
     Type: AWS::IAM::Role
     Properties:
@@ -72,7 +78,7 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource:
-                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+                  - !GetAtt 'LambdaOrganizationsAccountQueryLogGroup.Arn'
               - Effect: Allow
                 Action:
                   - sts:AssumeRole
@@ -82,6 +88,7 @@ Resources:
   LambdaOrganizationsAccountQuery:
     Type: AWS::Lambda::Function
     Properties:
+      FunctionName: tgw-tagger-organizations-account-query
       Description: Queries the AWS Organizations API in the Organization Root for account Ids and Names
       Handler: index.lambda_handler
       Runtime: python3.8
@@ -177,6 +184,11 @@ Resources:
               response_data['AccountDetails'] = account_list
               return(response_data)
 
+  LambdaTGWAttachmentQueryLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: '/aws/lambda/tgw-tagger-attachment-query'
+      RetentionInDays: 90
 
   LambdaTGWAttachmentQueryRole:
     Type: AWS::IAM::Role
@@ -201,7 +213,7 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource:
-                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+                  - !GetAtt 'LambdaTGWAttachmentQueryLogGroup.Arn'
               - Effect: Allow
                 Action:
                   - ec2:DescribeTransitGatewayAttachments
@@ -210,6 +222,7 @@ Resources:
   LambdaTGWAttachmentQuery:
     Type: AWS::Lambda::Function
     Properties:
+      FunctionName: tgw-tagger-attachment-query
       Description: Queries the EC2 API for TGW attachment Ids
       Handler: index.lambda_handler
       Runtime: python3.8
@@ -323,6 +336,11 @@ Resources:
                   response_data['MapInput'].append({region: result}) 
               return(response_data)
 
+  LambdaTGWRTBQueryLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: '/aws/lambda/tgw-tagger-rtb-query'
+      RetentionInDays: 90
 
   LambdaTGWRTBQueryRole:
     Type: AWS::IAM::Role
@@ -347,7 +365,7 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource:
-                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+                  - !GetAtt 'LambdaTGWRTBQueryLogGroup.Arn'
               - Effect: Allow
                 Action:
                   - ec2:DescribeTransitGatewayRouteTables
@@ -357,6 +375,7 @@ Resources:
   LambdaTGWRTBQuery:
     Type: AWS::Lambda::Function
     Properties:
+      FunctionName: tgw-tagger-rtb-query
       Description: Queries the EC2 API for TGW Route Table CIDR entries
       Handler: index.lambda_handler
       Runtime: python3.8
@@ -477,6 +496,12 @@ Resources:
                       a['cidr'] = "MISSING"
               return event
 
+  LambdaTGWTagLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: '/aws/lambda/tgw-tagger-tagger'
+      RetentionInDays: 90
+
   LambdaTGWTagRole:
     Type: AWS::IAM::Role
     Properties:
@@ -500,7 +525,7 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource:
-                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+                  - !GetAtt 'LambdaTGWTagLogGroup.Arn'
               - Effect: Allow
                 Action:
                   - ec2:CreateTags
@@ -509,6 +534,7 @@ Resources:
   LambdaTGWTag:
     Type: AWS::Lambda::Function
     Properties:
+      FunctionName: tgw-tagger-tagger
       Description: Updates the TGW Attachment Name tag
       Handler: index.lambda_handler
       Runtime: python3.8
