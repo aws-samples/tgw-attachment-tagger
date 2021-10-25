@@ -54,6 +54,11 @@ Resources:
     Properties:
       LogGroupName: '/aws/lambda/tgw-tagger-organizations-account-query'
       RetentionInDays: 90
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W84
+            reason: "The data stored in CloudWatch Logs is not sensitive and does not warrant the additional expense of creating and using a CMK to provide encryption"
 
   LambdaOrganizationsAccountQueryRole:
     Type: AWS::IAM::Role
@@ -84,6 +89,11 @@ Resources:
                   - sts:AssumeRole
                 Resource:
                   - !Sub arn:aws:iam::${awsOrganizationsRootAccountId}:role/tgw-attachment-tagger-organization-query-role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "A single copy of this solution is to be deployed globally, resources have static names for ease of use"
 
   LambdaOrganizationsAccountQuery:
     Type: AWS::Lambda::Function
@@ -183,12 +193,24 @@ Resources:
               response_data = {}
               response_data['AccountDetails'] = account_list
               return(response_data)
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "This lambda requires access to AWS Service Endpoints so deployment into a VPC can't be guaranteed to work"
+          - id: W92
+            reason: "Reserved Concurrency is not relevent nor desired for this function"
 
   LambdaTGWAttachmentQueryLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: '/aws/lambda/tgw-tagger-attachment-query'
       RetentionInDays: 90
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W84
+            reason: "The data stored in CloudWatch Logs is not sensitive and does not warrant the additional expense of creating and using a CMK to provide encryption"
 
   LambdaTGWAttachmentQueryRole:
     Type: AWS::IAM::Role
@@ -218,6 +240,14 @@ Resources:
                 Action:
                   - ec2:DescribeTransitGatewayAttachments
                 Resource: "*"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "A single copy of this solution is to be deployed globally, resources have static names for ease of use"
+          - id: W11
+            reason: "The DescribeTransitGatewayAttachments action cannot be locked down to specific resource Arns or paths."
+
 
   LambdaTGWAttachmentQuery:
     Type: AWS::Lambda::Function
@@ -335,12 +365,24 @@ Resources:
                   result = list_transit_gateway_attachments(event['AccountDetails'], region)
                   response_data['MapInput'].append({region: result}) 
               return(response_data)
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "This lambda requires access to AWS Service Endpoints so deployment into a VPC can't be guaranteed to work"
+          - id: W92
+            reason: "Reserved Concurrency is not relevent nor desired for this function"
 
   LambdaTGWRTBQueryLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: '/aws/lambda/tgw-tagger-rtb-query'
       RetentionInDays: 90
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W84
+            reason: "The data stored in CloudWatch Logs is not sensitive and does not warrant the additional expense of creating and using a CMK to provide encryption"
 
   LambdaTGWRTBQueryRole:
     Type: AWS::IAM::Role
@@ -371,6 +413,13 @@ Resources:
                   - ec2:DescribeTransitGatewayRouteTables
                   - ec2:SearchTransitGatewayRoutes
                 Resource: "*"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "A single copy of this solution is to be deployed globally, resources have static names for ease of use"
+          - id: W11
+            reason: "The DescribeTransitGatewayRouteTables & SearchTransitGatewayRoutes actions cannot be locked down to specific resource Arns or paths."
 
   LambdaTGWRTBQuery:
     Type: AWS::Lambda::Function
@@ -495,12 +544,24 @@ Resources:
                   else:
                       a['cidr'] = "MISSING"
               return event
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "This lambda requires access to AWS Service Endpoints so deployment into a VPC can't be guaranteed to work"
+          - id: W92
+            reason: "Reserved Concurrency is not relevent nor desired for this function"
 
   LambdaTGWTagLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: '/aws/lambda/tgw-tagger-tagger'
       RetentionInDays: 90
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W84
+            reason: "The data stored in CloudWatch Logs is not sensitive and does not warrant the additional expense of creating and using a CMK to provide encryption"
 
   LambdaTGWTagRole:
     Type: AWS::IAM::Role
@@ -529,7 +590,13 @@ Resources:
               - Effect: Allow
                 Action:
                   - ec2:CreateTags
-                Resource: "*"
+                Resource: 
+                  - !Sub "arn:aws:ec2:*:${AWS::AccountId}:transit-gateway-attachment/*"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "A single copy of this solution is to be deployed globally, resources have static names for ease of use"
 
   LambdaTGWTag:
     Type: AWS::Lambda::Function
@@ -619,6 +686,13 @@ Resources:
                       logger.info(f"Skipping attachment {attachment['attachmentId']}")
                       attachment['tagCreated'] = False        
               return event
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "This lambda requires access to AWS Service Endpoints so deployment into a VPC can't be guaranteed to work"
+          - id: W92
+            reason: "Reserved Concurrency is not relevent nor desired for this function"
 
 
   TGWTaggerStateMachineRole:
@@ -657,6 +731,11 @@ Resources:
                   - states:DescribeExecution
                 Resource:
                   - !Sub arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:tgw-attachment-tagger-state-machine
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "A single copy of this solution is to be deployed globally, resources have static names for ease of use"
 
   TGWTaggerStepFunction:
     Type: 'AWS::StepFunctions::StateMachine'
@@ -730,6 +809,11 @@ Resources:
                   - states:StartExecution
                 Resource:
                   - !Sub arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:tgw-attachment-tagger-state-machine
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "A single copy of this solution is to be deployed globally, resources have static names for ease of use"
 
   CloudWatchEventRule:
     Type: AWS::Events::Rule

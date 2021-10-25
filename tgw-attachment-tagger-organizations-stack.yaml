@@ -56,6 +56,6 @@ Resources:
       cfn_nag:
         rules_to_suppress:
           - id: W28
-            reason: "This role needs to be assume across account boundaries and must have a fixed name."
+            reason: "This role needs to be assumed across account boundaries and must have a fixed name."
           - id: W11
             reason: "By design this role is used to walk the entire AWS Organizations tree to obtain the account Name for every account in the Organization; therefore the wildcard resource is required."
