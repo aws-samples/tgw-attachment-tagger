@@ -49,6 +49,17 @@ Metadata:
 
 Resources:
 
+  LambdaOrganizationsAccountQueryLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: '/aws/lambda/tgw-tagger-organizations-account-query'
+      RetentionInDays: 90
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W84
+            reason: "The data stored in CloudWatch Logs is not sensitive and does not warrant the additional expense of creating and using a CMK to provide encryption"
+
   LambdaOrganizationsAccountQueryRole:
     Type: AWS::IAM::Role
     Properties:
@@ -72,16 +83,22 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource:
-                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+                  - !GetAtt 'LambdaOrganizationsAccountQueryLogGroup.Arn'
               - Effect: Allow
                 Action:
                   - sts:AssumeRole
                 Resource:
                   - !Sub arn:aws:iam::${awsOrganizationsRootAccountId}:role/tgw-attachment-tagger-organization-query-role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "A single copy of this solution is to be deployed globally, resources have static names for ease of use"
 
   LambdaOrganizationsAccountQuery:
     Type: AWS::Lambda::Function
     Properties:
+      FunctionName: tgw-tagger-organizations-account-query
       Description: Queries the AWS Organizations API in the Organization Root for account Ids and Names
       Handler: index.lambda_handler
       Runtime: python3.8
@@ -90,7 +107,7 @@ Resources:
       MemorySize: 128
       Environment:
         Variables:
-          organizations_role_arn: !Sub arn:aws:iam::${awsOrganizationsRootAccountId}:role/tgw-attachment-tagger-organization-query-role
+          ORGANIZATIONS_ROLE_ARN: !Sub arn:aws:iam::${awsOrganizationsRootAccountId}:role/tgw-attachment-tagger-organization-query-role
       TracingConfig:
         Mode: Active
       Code:
@@ -118,10 +135,12 @@ Resources:
           import os
           import json
           from botocore.exceptions import ClientError
+
           sts_client = boto3.client('sts')
           logger = logging.getLogger()
           logger.setLevel(logging.INFO)
-          organizationsRole = os.environ.get('organizations_role_arn')
+
+          ORGANIZATIONS_ROLE = os.environ.get('ORGANIZATIONS_ROLE_ARN')
 
           def log_exception(exception_type, exception_value, exception_traceback):
               """Function to create a JSON object containing exception details, which can then be logged as one line to the logger."""
@@ -147,11 +166,11 @@ Resources:
                   aws_secret_access_key=assumedRole['Credentials']['SecretAccessKey'],
                   aws_session_token=assumedRole['Credentials']['SessionToken'])
 
-          def get_account_details_from_organization(orgObject):
+          def get_account_details_from_organization(org_object):
               """Query the Organizations API to build a list of Account Ids and Names."""
               result_object = []
               try:
-                  paginator = orgObject.get_paginator('list_accounts')
+                  paginator = org_object.get_paginator('list_accounts')
                   iterator  = paginator.paginate()
                   for page in iterator:
                       for account in page['Accounts']:
@@ -167,14 +186,31 @@ Resources:
               return result_object
 
           def lambda_handler(event, context):
-              boto3_session_object = assume_role(organizationsRole)
-              orgObject = boto3_session_object.client('organizations')
-              account_list = get_account_details_from_organization(orgObject)
+              boto3_session_object = assume_role(ORGANIZATIONS_ROLE)
+              org_object = boto3_session_object.client('organizations')
+              account_list = get_account_details_from_organization(org_object)
               logger.info(f"{account_list}")
               response_data = {}
               response_data['AccountDetails'] = account_list
               return(response_data)
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "This lambda requires access to AWS Service Endpoints so deployment into a VPC can't be guaranteed to work"
+          - id: W92
+            reason: "Reserved Concurrency is not relevent nor desired for this function"
 
+  LambdaTGWAttachmentQueryLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: '/aws/lambda/tgw-tagger-attachment-query'
+      RetentionInDays: 90
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W84
+            reason: "The data stored in CloudWatch Logs is not sensitive and does not warrant the additional expense of creating and using a CMK to provide encryption"
 
   LambdaTGWAttachmentQueryRole:
     Type: AWS::IAM::Role
@@ -199,15 +235,24 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource:
-                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+                  - !GetAtt 'LambdaTGWAttachmentQueryLogGroup.Arn'
               - Effect: Allow
                 Action:
                   - ec2:DescribeTransitGatewayAttachments
                 Resource: "*"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "A single copy of this solution is to be deployed globally, resources have static names for ease of use"
+          - id: W11
+            reason: "The DescribeTransitGatewayAttachments action cannot be locked down to specific resource Arns or paths."
+
 
   LambdaTGWAttachmentQuery:
     Type: AWS::Lambda::Function
     Properties:
+      FunctionName: tgw-tagger-attachment-query
       Description: Queries the EC2 API for TGW attachment Ids
       Handler: index.lambda_handler
       Runtime: python3.8
@@ -216,8 +261,8 @@ Resources:
       MemorySize: 128
       Environment:
         Variables:
-          region_list: !Ref TGWRegions
-          tgw_list: !Ref TGWExclusionList
+          REGION_LIST: !Ref TGWRegions
+          TGW_LIST: !Ref TGWExclusionList
       TracingConfig:
         Mode: Active
       Code:
@@ -245,14 +290,17 @@ Resources:
           import os
           import json
           from botocore.exceptions import ClientError
+
           logger = logging.getLogger()
           logger.setLevel(logging.INFO)
-          regionList = os.environ.get('region_list').split(",")
-          originalTgwList = os.environ.get('tgw_list')
-          if originalTgwList:
-              tgwList = originalTgwList.split(",")
+
+          REGION_LIST = os.environ.get('REGION_LIST').split(",")
+          ORIGINAL_TGW_LIST = os.environ.get('TGW_LIST')
+
+          if ORIGINAL_TGW_LIST:
+              tgw_list = ORIGINAL_TGW_LIST.split(",")
           else:
-              tgwList = []
+              tgw_list = []
 
           def log_exception(exception_type, exception_value, exception_traceback):
               """Function to create a JSON object containing exception details, which can then be logged as one line to the logger."""
@@ -264,7 +312,7 @@ Resources:
               """Create a regional EC2 boto client."""
               ec2 = boto3.client('ec2', region_name=region)
               return ec2
-                
+              
           def list_transit_gateway_attachments(accountList: list, region: str):
               """Returns all TGW attachments for the specified Region."""
               logger.info(f"Getting list of TGW Attachments for region {region}")
@@ -292,18 +340,18 @@ Resources:
                   for page in iterator:
                       for attachment in page['TransitGatewayAttachments']:
                           # Check TGW has not been excluded from processing
-                          if attachment['TransitGatewayId'] not in tgwList:
+                          if attachment['TransitGatewayId'] not in tgw_list:
                               logger.info(f"Processing Attachment: {attachment['TransitGatewayAttachmentId']}")
-                              nameStr = "MISSING"
+                              tgw_name = "MISSING"
                               for i in attachment['Tags']:
                                   # Check whether Name tag exists
                                   if "Name" == i['Key']:
-                                      nameStr = i['Value']   
+                                      tgw_name = i['Value']   
                               account_name = "MISSING"
                               # Check account list object for a match against the TGW resource owner
                               for account in [x for x in accountList if x['id'] == attachment['ResourceOwnerId']]:
                                   account_name = account['name']           
-                              result_object.append({"tgwId": attachment['TransitGatewayId'], "attachmentId": attachment['TransitGatewayAttachmentId'], "accountId": attachment['ResourceOwnerId'],"accountName": account_name, "nametag": nameStr})
+                              result_object.append({"tgwId": attachment['TransitGatewayId'], "attachmentId": attachment['TransitGatewayAttachmentId'], "accountId": attachment['ResourceOwnerId'],"accountName": account_name, "nametag": tgw_name})
               except:
                   log_exception(*sys.exc_info())
                   raise RuntimeError(f"Error getting list of TGW attachments for region {region}")
@@ -312,11 +360,29 @@ Resources:
           def lambda_handler(event, context):
               response_data = {}
               response_data['MapInput'] = []
-              for region in regionList:
+              for region in REGION_LIST:
                   logger.info(f"Processing Region: {region}")
                   result = list_transit_gateway_attachments(event['AccountDetails'], region)
                   response_data['MapInput'].append({region: result}) 
               return(response_data)
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "This lambda requires access to AWS Service Endpoints so deployment into a VPC can't be guaranteed to work"
+          - id: W92
+            reason: "Reserved Concurrency is not relevent nor desired for this function"
+
+  LambdaTGWRTBQueryLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: '/aws/lambda/tgw-tagger-rtb-query'
+      RetentionInDays: 90
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W84
+            reason: "The data stored in CloudWatch Logs is not sensitive and does not warrant the additional expense of creating and using a CMK to provide encryption"
 
   LambdaTGWRTBQueryRole:
     Type: AWS::IAM::Role
@@ -341,25 +407,30 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource:
-                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+                  - !GetAtt 'LambdaTGWRTBQueryLogGroup.Arn'
               - Effect: Allow
                 Action:
                   - ec2:DescribeTransitGatewayRouteTables
                   - ec2:SearchTransitGatewayRoutes
                 Resource: "*"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "A single copy of this solution is to be deployed globally, resources have static names for ease of use"
+          - id: W11
+            reason: "The DescribeTransitGatewayRouteTables & SearchTransitGatewayRoutes actions cannot be locked down to specific resource Arns or paths."
 
   LambdaTGWRTBQuery:
     Type: AWS::Lambda::Function
     Properties:
+      FunctionName: tgw-tagger-rtb-query
       Description: Queries the EC2 API for TGW Route Table CIDR entries
       Handler: index.lambda_handler
       Runtime: python3.8
       Role: !GetAtt 'LambdaTGWRTBQueryRole.Arn'
       Timeout: 900
       MemorySize: 128
-      Environment:
-        Variables:
-          region_list: !Ref TGWRegions
       TracingConfig:
         Mode: Active
       Code:
@@ -387,9 +458,9 @@ Resources:
           import os
           import json
           from botocore.exceptions import ClientError
+
           logger = logging.getLogger()
           logger.setLevel(logging.INFO)
-          regionList = os.environ.get('region_list').split(",")
 
           def log_exception(exception_type, exception_value, exception_traceback):
               """Function to create a JSON object containing exception details, which can then be logged as one line to the logger."""
@@ -426,53 +497,71 @@ Resources:
                   raise RuntimeError(f"Error getting TGW RTB for region {region}")    
               return result_object
 
-          def find_tgw_attachment_cidr(attachmentId: str, routeTableList: list, region: str):
+          def find_tgw_attachment_cidr(attachment_id: str, route_table_list: list, region: str):
               """Get CIDR for TGW Attachment."""
               result_object = []
-              for routeTable in routeTableList:
-                  innerCidr = search_rtb_for_attachment(attachmentId, routeTable['rtbId'], region)
-                  if innerCidr:
-                      result_object.append({"cidr": innerCidr})
+              for route_table in route_table_list:
+                  cidr_range = search_rtb_for_attachment(attachment_id, route_table['rtbId'], region)
+                  if cidr_range:
+                      result_object.append({"cidr": cidr_range})
               if len(result_object) == 1:
                   return result_object[0]['cidr']
               else:
                   return None
 
-          def search_rtb_for_attachment(attachmentId: str, routeTableId: str, region: str):
+          def search_rtb_for_attachment(attachment_id: str, route_table_id: str, region: str):
               """Search RTB for TGW Attachment."""
               ec2 = get_ec2_client(region)
               result_object = None
               try:
                   response = ec2.search_transit_gateway_routes(
-                      TransitGatewayRouteTableId=routeTableId,
+                      TransitGatewayRouteTableId=route_table_id,
                       Filters=[
                           {
                               'Name': 'attachment.transit-gateway-attachment-id',
                               'Values': [
-                                  attachmentId,
+                                  attachment_id,
                               ]
                           },
                       ]
                   )
               except:
                   log_exception(*sys.exc_info())
-                  raise RuntimeError(f"Error searching TGW Route Table: {routeTableId}")
+                  raise RuntimeError(f"Error searching TGW Route Table: {route_table_id}")
               if response['Routes']:
                   result_object = response['Routes'][0]['DestinationCidrBlock']
               return result_object
 
           def lambda_handler(event, context):
               logger.info(f"{event}")
-              mapRegion = next(iter(event))
-              rtb = list_tgw_route_tables(mapRegion)
-              for a in event[mapRegion]:
+              map_region = next(iter(event))
+              rtb = list_tgw_route_tables(map_region)
+              for a in event[map_region]:
                   logger.info(f"Processing attachment {a['attachmentId']}")
-                  cidr = find_tgw_attachment_cidr(a['attachmentId'], rtb, mapRegion)
+                  cidr = find_tgw_attachment_cidr(a['attachmentId'], rtb, map_region)
                   if None is not cidr:
                       a['cidr'] = cidr
                   else:
                       a['cidr'] = "MISSING"
               return event
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "This lambda requires access to AWS Service Endpoints so deployment into a VPC can't be guaranteed to work"
+          - id: W92
+            reason: "Reserved Concurrency is not relevent nor desired for this function"
+
+  LambdaTGWTagLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: '/aws/lambda/tgw-tagger-tagger'
+      RetentionInDays: 90
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W84
+            reason: "The data stored in CloudWatch Logs is not sensitive and does not warrant the additional expense of creating and using a CMK to provide encryption"
 
   LambdaTGWTagRole:
     Type: AWS::IAM::Role
@@ -497,24 +586,28 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource:
-                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+                  - !GetAtt 'LambdaTGWTagLogGroup.Arn'
               - Effect: Allow
                 Action:
                   - ec2:CreateTags
-                Resource: "*"
+                Resource: 
+                  - !Sub "arn:aws:ec2:*:${AWS::AccountId}:transit-gateway-attachment/*"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "A single copy of this solution is to be deployed globally, resources have static names for ease of use"
 
   LambdaTGWTag:
     Type: AWS::Lambda::Function
     Properties:
+      FunctionName: tgw-tagger-tagger
       Description: Updates the TGW Attachment Name tag
       Handler: index.lambda_handler
       Runtime: python3.8
       Role: !GetAtt 'LambdaTGWTagRole.Arn'
       Timeout: 60
       MemorySize: 128
-      Environment:
-        Variables:
-          region_list: !Ref TGWRegions
       TracingConfig:
         Mode: Active
       Code:
@@ -542,9 +635,9 @@ Resources:
           import os
           import json
           from botocore.exceptions import ClientError
+
           logger = logging.getLogger()
           logger.setLevel(logging.INFO)
-          regionList = os.environ.get('region_list').split(",")
 
           def log_exception(exception_type, exception_value, exception_traceback):
               """Function to create a JSON object containing exception details, which can then be logged as one line to the logger."""
@@ -581,18 +674,25 @@ Resources:
 
           def lambda_handler(event, context):
               logger.info(f"{event}")
-              mapRegion = next(iter(event))
-              for attachment in event[mapRegion]:
+              map_region = next(iter(event))
+              for attachment in event[map_region]:
                   # Logic to determine whether we should tag the attachment
                   if ("MISSING" == attachment['nametag']) and ("MISSING" != attachment['cidr']):
                       # Attachment has no Name tag and we were able find the CIDR from the propagated Route Table entry
                       logger.info(f"Tagging attachment {attachment['attachmentId']}")
-                      tag_tgw_attachment(attachment, mapRegion)
+                      tag_tgw_attachment(attachment, map_region)
                       attachment['tagCreated'] = True
                   else:
                       logger.info(f"Skipping attachment {attachment['attachmentId']}")
                       attachment['tagCreated'] = False        
               return event
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "This lambda requires access to AWS Service Endpoints so deployment into a VPC can't be guaranteed to work"
+          - id: W92
+            reason: "Reserved Concurrency is not relevent nor desired for this function"
 
 
   TGWTaggerStateMachineRole:
@@ -631,6 +731,11 @@ Resources:
                   - states:DescribeExecution
                 Resource:
                   - !Sub arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:tgw-attachment-tagger-state-machine
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "A single copy of this solution is to be deployed globally, resources have static names for ease of use"
 
   TGWTaggerStepFunction:
     Type: 'AWS::StepFunctions::StateMachine'
@@ -704,6 +809,11 @@ Resources:
                   - states:StartExecution
                 Resource:
                   - !Sub arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:tgw-attachment-tagger-state-machine
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "A single copy of this solution is to be deployed globally, resources have static names for ease of use"
 
   CloudWatchEventRule:
     Type: AWS::Events::Rule

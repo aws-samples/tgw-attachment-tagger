@@ -29,26 +29,33 @@ Parameters:
 Resources:
 
   TargetLambdaOrganizationsAccountQueryRole:
-      Type: AWS::IAM::Role
-      Properties:
-        RoleName: tgw-attachment-tagger-organization-query-role
-        AssumeRolePolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-            - Effect: Allow
-              Principal:
-                AWS: !Sub arn:aws:iam::${NetworkingAccountId}:role/tgw-attachment-tagger-organizations-lambda-role
-              Action: sts:AssumeRole
-        Path: /
-        Policies:
-          - PolicyName: tgw-attachment-tagger-organization-query-inline-policy
-            PolicyDocument:
-              Version: '2012-10-17'
-              Statement:
-                - Effect: Allow
-                  Action:
-                    - organizations:ListRoots
-                    - organizations:ListAccounts
-                    - organizations:ListOrganizationalUnitsForParent
-                    - organizations:ListChildren
-                  Resource: "*"
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: tgw-attachment-tagger-organization-query-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${NetworkingAccountId}:role/tgw-attachment-tagger-organizations-lambda-role
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: tgw-attachment-tagger-organization-query-inline-policy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - organizations:ListRoots
+                  - organizations:ListAccounts
+                  - organizations:ListOrganizationalUnitsForParent
+                  - organizations:ListChildren
+                Resource: "*"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "This role needs to be assumed across account boundaries and must have a fixed name."
+          - id: W11
+            reason: "By design this role is used to walk the entire AWS Organizations tree to obtain the account Name for every account in the Organization; therefore the wildcard resource is required."
