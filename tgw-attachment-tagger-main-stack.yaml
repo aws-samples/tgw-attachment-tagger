@@ -134,7 +134,6 @@ Resources:
           import traceback
           import os
           import json
-          from botocore.exceptions import ClientError
 
           sts_client = boto3.client('sts')
           logger = logging.getLogger()
@@ -174,18 +173,22 @@ Resources:
                   iterator  = paginator.paginate()
                   for page in iterator:
                       for account in page['Accounts']:
-                          # Capture the Account Id and Name from Organizations if the account is active
                           if "ACTIVE" == account['Status']:
-                              logger.info(f"Account ID {account['Id']} has status: {account['Status']}")
+                              logger.debug(f"Account ID {account['Id']} has status: {account['Status']}")
                               result_object.append({"id": account['Id'], "name": account['Name']})
                           else:
-                              logger.info(f"Account ID {account['Id']} has status: {account['Status']}")
+                              logger.debug(f"Account ID {account['Id']} has status: {account['Status']}")
               except:
                   log_exception(*sys.exc_info())
                   raise RuntimeError(f"Error calling list_accounts for the organization")
               return result_object
 
           def lambda_handler(event, context):
+              """
+              Lambda handler function. 
+              
+              Queries the AWS Organizations API to determine menmber account IDs and Names, before returning a list of dictionaries with account information.
+              """
               boto3_session_object = assume_role(ORGANIZATIONS_ROLE)
               org_object = boto3_session_object.client('organizations')
               account_list = get_account_details_from_organization(org_object)
@@ -289,13 +292,15 @@ Resources:
           import traceback
           import os
           import json
-          from botocore.exceptions import ClientError
 
           logger = logging.getLogger()
           logger.setLevel(logging.INFO)
 
           REGION_LIST = os.environ.get('REGION_LIST').split(",")
           ORIGINAL_TGW_LIST = os.environ.get('TGW_LIST')
+
+          if not REGION_LIST:
+              raise RuntimeError(f"At least one region must be specified")
 
           if ORIGINAL_TGW_LIST:
               tgw_list = ORIGINAL_TGW_LIST.split(",")
@@ -310,8 +315,7 @@ Resources:
 
           def get_ec2_client(region: str):
               """Create a regional EC2 boto client."""
-              ec2 = boto3.client('ec2', region_name=region)
-              return ec2
+              return boto3.client('ec2', region_name=region)
               
           def list_transit_gateway_attachments(accountList: list, region: str):
               """Returns all TGW attachments for the specified Region."""
@@ -337,33 +341,39 @@ Resources:
                           },
                       ] 
                   )
-                  for page in iterator:
-                      for attachment in page['TransitGatewayAttachments']:
-                          # Check TGW has not been excluded from processing
-                          if attachment['TransitGatewayId'] not in tgw_list:
-                              logger.info(f"Processing Attachment: {attachment['TransitGatewayAttachmentId']}")
-                              tgw_name = "MISSING"
-                              for i in attachment['Tags']:
-                                  # Check whether Name tag exists
-                                  if "Name" == i['Key']:
-                                      tgw_name = i['Value']   
-                              account_name = "MISSING"
-                              # Check account list object for a match against the TGW resource owner
-                              for account in [x for x in accountList if x['id'] == attachment['ResourceOwnerId']]:
-                                  account_name = account['name']           
-                              result_object.append({"tgwId": attachment['TransitGatewayId'], "attachmentId": attachment['TransitGatewayAttachmentId'], "accountId": attachment['ResourceOwnerId'],"accountName": account_name, "nametag": tgw_name})
               except:
                   log_exception(*sys.exc_info())
                   raise RuntimeError(f"Error getting list of TGW attachments for region {region}")
+              for page in iterator:
+                  for attachment in page['TransitGatewayAttachments']:
+                      # Check TGW has not been excluded from processing
+                      if attachment['TransitGatewayId'] not in tgw_list:
+                          logger.info(f"Processing Attachment: {attachment['TransitGatewayAttachmentId']}")
+                          tgw_name = "MISSING"
+                          for i in attachment['Tags']:
+                              # Check whether Name tag exists
+                              if "Name" == i['Key']:
+                                  tgw_name = i['Value']   
+                          account_name = "MISSING"
+                          # Check account list object for a match against the TGW resource owner
+                          for account in [x for x in accountList if x['id'] == attachment['ResourceOwnerId']]:
+                              account_name = account['name']           
+                          result_object.append({"tgwId": attachment['TransitGatewayId'], "attachmentId": attachment['TransitGatewayAttachmentId'], "accountId": attachment['ResourceOwnerId'],"accountName": account_name, "nametag": tgw_name})
               return result_object
 
           def lambda_handler(event, context):
+              """
+              Lambda handler function. 
+              
+              Queries the EC2 API for Transit Gateway Attachment details for each configured region, before returning a dictionary of lists with TGW attachment information.
+              """
               response_data = {}
               response_data['MapInput'] = []
-              for region in REGION_LIST:
-                  logger.info(f"Processing Region: {region}")
-                  result = list_transit_gateway_attachments(event['AccountDetails'], region)
-                  response_data['MapInput'].append({region: result}) 
+              if event['AccountDetails']:
+                  for region in REGION_LIST:
+                      logger.info(f"Processing Region: {region}")
+                      result = list_transit_gateway_attachments(event['AccountDetails'], region)
+                      response_data['MapInput'].append({region: result}) 
               return(response_data)
     Metadata:
       cfn_nag:
@@ -457,7 +467,6 @@ Resources:
           import traceback
           import os
           import json
-          from botocore.exceptions import ClientError
 
           logger = logging.getLogger()
           logger.setLevel(logging.INFO)
@@ -529,11 +538,19 @@ Resources:
                   log_exception(*sys.exc_info())
                   raise RuntimeError(f"Error searching TGW Route Table: {route_table_id}")
               if response['Routes']:
-                  result_object = response['Routes'][0]['DestinationCidrBlock']
+                  # An attachment may only be associated with a single Route Table, however the API returns a list containing a single element
+                  for route in response['Routes']:
+                      result_object = route['DestinationCidrBlock']
               return result_object
 
           def lambda_handler(event, context):
-              logger.info(f"{event}")
+              """
+              Lambda handler function. 
+              
+              Queries the TGW route tables for the supplied region, to find out the CIDR range associated with the attachment
+              """
+              logger.debug(f"{event}")
+              # Get the next item in the supplied dictionary. The Map iterator in the surrounding Step Function will supply a single region at a time to this function - however we do not know which at runtime
               map_region = next(iter(event))
               rtb = list_tgw_route_tables(map_region)
               for a in event[map_region]:
@@ -634,7 +651,6 @@ Resources:
           import traceback
           import os
           import json
-          from botocore.exceptions import ClientError
 
           logger = logging.getLogger()
           logger.setLevel(logging.INFO)
@@ -657,7 +673,7 @@ Resources:
 
               try:
                   # Add Name tag to TGW attachment
-                  response = ec2.create_tags(
+                  ec2.create_tags(
                       Resources=[
                           attachment['attachmentId'],
                       ],
@@ -673,8 +689,15 @@ Resources:
                   raise RuntimeError(f"Error updating TGW attachment tag for {attachment['attachmentId']}")
 
           def lambda_handler(event, context):
-              logger.info(f"{event}")
+              """
+              Lambda handler function. 
+              
+              Applies missing Name tags to TGW attachments where we have the necessary information and there is no existing Name tag
+              """
+              logger.debug(f"{event}")
+              # Get the next item in the supplied dictionary. The Map iterator in the surrounding Step Function will supply a single region at a time to this function - however we do not know which at runtime
               map_region = next(iter(event))
+              logger.info(f"Processing region {map_region}")
               for attachment in event[map_region]:
                   # Logic to determine whether we should tag the attachment
                   if ("MISSING" == attachment['nametag']) and ("MISSING" != attachment['cidr']):

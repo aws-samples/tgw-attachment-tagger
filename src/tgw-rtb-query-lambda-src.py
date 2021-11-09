@@ -20,7 +20,6 @@ import sys
 import traceback
 import os
 import json
-from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -92,11 +91,19 @@ def search_rtb_for_attachment(attachment_id: str, route_table_id: str, region: s
         log_exception(*sys.exc_info())
         raise RuntimeError(f"Error searching TGW Route Table: {route_table_id}")
     if response['Routes']:
-        result_object = response['Routes'][0]['DestinationCidrBlock']
+        # An attachment may only be associated with a single Route Table, however the API returns a list containing a single element
+        for route in response['Routes']:
+            result_object = route['DestinationCidrBlock']
     return result_object
 
 def lambda_handler(event, context):
-    logger.info(f"{event}")
+    """
+    Lambda handler function. 
+    
+    Queries the TGW route tables for the supplied region, to find out the CIDR range associated with the attachment
+    """
+    logger.debug(f"{event}")
+    # Get the next item in the supplied dictionary. The Map iterator in the surrounding Step Function will supply a single region at a time to this function - however we do not know which at runtime
     map_region = next(iter(event))
     rtb = list_tgw_route_tables(map_region)
     for a in event[map_region]:

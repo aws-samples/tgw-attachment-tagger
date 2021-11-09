@@ -20,7 +20,6 @@ import sys
 import traceback
 import os
 import json
-from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -43,7 +42,7 @@ def tag_tgw_attachment(attachment: dict, region: str):
 
     try:
         # Add Name tag to TGW attachment
-        response = ec2.create_tags(
+        ec2.create_tags(
             Resources=[
                 attachment['attachmentId'],
             ],
@@ -59,8 +58,15 @@ def tag_tgw_attachment(attachment: dict, region: str):
         raise RuntimeError(f"Error updating TGW attachment tag for {attachment['attachmentId']}")
 
 def lambda_handler(event, context):
-    logger.info(f"{event}")
+    """
+    Lambda handler function. 
+    
+    Applies missing Name tags to TGW attachments where we have the necessary information and there is no existing Name tag
+    """
+    logger.debug(f"{event}")
+    # Get the next item in the supplied dictionary. The Map iterator in the surrounding Step Function will supply a single region at a time to this function - however we do not know which at runtime
     map_region = next(iter(event))
+    logger.info(f"Processing region {map_region}")
     for attachment in event[map_region]:
         # Logic to determine whether we should tag the attachment
         if ("MISSING" == attachment['nametag']) and ("MISSING" != attachment['cidr']):

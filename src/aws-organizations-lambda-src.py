@@ -20,7 +20,6 @@ import sys
 import traceback
 import os
 import json
-from botocore.exceptions import ClientError
 
 sts_client = boto3.client('sts')
 logger = logging.getLogger()
@@ -60,18 +59,22 @@ def get_account_details_from_organization(org_object):
         iterator  = paginator.paginate()
         for page in iterator:
             for account in page['Accounts']:
-                # Capture the Account Id and Name from Organizations if the account is active
                 if "ACTIVE" == account['Status']:
-                    logger.info(f"Account ID {account['Id']} has status: {account['Status']}")
+                    logger.debug(f"Account ID {account['Id']} has status: {account['Status']}")
                     result_object.append({"id": account['Id'], "name": account['Name']})
                 else:
-                    logger.info(f"Account ID {account['Id']} has status: {account['Status']}")
+                    logger.debug(f"Account ID {account['Id']} has status: {account['Status']}")
     except:
         log_exception(*sys.exc_info())
         raise RuntimeError(f"Error calling list_accounts for the organization")
     return result_object
 
 def lambda_handler(event, context):
+    """
+    Lambda handler function. 
+    
+    Queries the AWS Organizations API to determine menmber account IDs and Names, before returning a list of dictionaries with account information.
+    """
     boto3_session_object = assume_role(ORGANIZATIONS_ROLE)
     org_object = boto3_session_object.client('organizations')
     account_list = get_account_details_from_organization(org_object)
