@@ -20,13 +20,15 @@ import sys
 import traceback
 import os
 import json
-from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 REGION_LIST = os.environ.get('REGION_LIST').split(",")
 ORIGINAL_TGW_LIST = os.environ.get('TGW_LIST')
+
+if not REGION_LIST:
+    raise RuntimeError("Environment Variable REGION_LIST is empty - At least one region must be specified")
 
 if ORIGINAL_TGW_LIST:
     tgw_list = ORIGINAL_TGW_LIST.split(",")
@@ -41,8 +43,7 @@ def log_exception(exception_type, exception_value, exception_traceback):
 
 def get_ec2_client(region: str):
     """Create a regional EC2 boto client."""
-    ec2 = boto3.client('ec2', region_name=region)
-    return ec2
+    return boto3.client('ec2', region_name=region)
     
 def list_transit_gateway_attachments(accountList: list, region: str):
     """Returns all TGW attachments for the specified Region."""
@@ -68,31 +69,37 @@ def list_transit_gateway_attachments(accountList: list, region: str):
                 },
             ] 
         )
-        for page in iterator:
-            for attachment in page['TransitGatewayAttachments']:
-                # Check TGW has not been excluded from processing
-                if attachment['TransitGatewayId'] not in tgw_list:
-                    logger.info(f"Processing Attachment: {attachment['TransitGatewayAttachmentId']}")
-                    tgw_name = "MISSING"
-                    for i in attachment['Tags']:
-                        # Check whether Name tag exists
-                        if "Name" == i['Key']:
-                            tgw_name = i['Value']   
-                    account_name = "MISSING"
-                    # Check account list object for a match against the TGW resource owner
-                    for account in [x for x in accountList if x['id'] == attachment['ResourceOwnerId']]:
-                        account_name = account['name']           
-                    result_object.append({"tgwId": attachment['TransitGatewayId'], "attachmentId": attachment['TransitGatewayAttachmentId'], "accountId": attachment['ResourceOwnerId'],"accountName": account_name, "nametag": tgw_name})
     except:
         log_exception(*sys.exc_info())
         raise RuntimeError(f"Error getting list of TGW attachments for region {region}")
+    for page in iterator:
+        for attachment in page['TransitGatewayAttachments']:
+            # Check TGW has not been excluded from processing
+            if attachment['TransitGatewayId'] not in tgw_list:
+                logger.info(f"Processing Attachment: {attachment['TransitGatewayAttachmentId']}")
+                tgw_name = "MISSING"
+                for i in attachment['Tags']:
+                    # Check whether Name tag exists
+                    if "Name" == i['Key']:
+                        tgw_name = i['Value']   
+                account_name = "MISSING"
+                # Check account list object for a match against the TGW resource owner
+                for account in [x for x in accountList if x['id'] == attachment['ResourceOwnerId']]:
+                    account_name = account['name']           
+                result_object.append({"tgwId": attachment['TransitGatewayId'], "attachmentId": attachment['TransitGatewayAttachmentId'], "accountId": attachment['ResourceOwnerId'],"accountName": account_name, "nametag": tgw_name})
     return result_object
 
 def lambda_handler(event, context):
+    """
+    Lambda handler function. 
+    
+    Queries the EC2 API for Transit Gateway Attachment details for each configured region, before returning a dictionary of lists with TGW attachment information.
+    """
     response_data = {}
     response_data['MapInput'] = []
-    for region in REGION_LIST:
-        logger.info(f"Processing Region: {region}")
-        result = list_transit_gateway_attachments(event['AccountDetails'], region)
-        response_data['MapInput'].append({region: result}) 
+    if event['AccountDetails']:
+        for region in REGION_LIST:
+            logger.info(f"Processing Region: {region}")
+            result = list_transit_gateway_attachments(event['AccountDetails'], region)
+            response_data['MapInput'].append({region: result}) 
     return(response_data)
