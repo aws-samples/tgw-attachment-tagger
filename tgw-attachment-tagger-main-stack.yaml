@@ -754,17 +754,55 @@ Resources:
                   - states:DescribeExecution
                 Resource:
                   - !Sub arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:tgw-attachment-tagger-state-machine
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !GetAtt 'TGWTaggerStateMachineLogGroup.Arn'
+              - Effect: Allow
+                Action:
+                  - logs:DescribeLogGroups
+                  - logs:PutResourcePolicy
+                  - logs:DescribeResourcePolicies
+                  - logs:CreateLogDelivery
+                  - logs:GetLogDelivery
+                  - logs:UpdateLogDelivery
+                  - logs:DeleteLogDelivery
+                  - logs:ListLogDeliveries
+                Resource: "*"
     Metadata:
       cfn_nag:
         rules_to_suppress:
           - id: W28
             reason: "A single copy of this solution is to be deployed globally, resources have static names for ease of use"
+          - id: W11
+            reason: "Step Functions requires the ability to create/update log resource policies to enable CloudWatch Logging"
+
+  TGWTaggerStateMachineLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: '/aws/stepfunction/tgw-tagger-state-machine'
+      RetentionInDays: 90
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W84
+            reason: "The data stored in CloudWatch Logs is not sensitive and does not warrant the additional expense of creating and using a CMK to provide encryption"
 
   TGWTaggerStepFunction:
     Type: 'AWS::StepFunctions::StateMachine'
     Properties:
       StateMachineName: tgw-attachment-tagger-state-machine
+      StateMachineType: STANDARD
       RoleArn: !GetAtt 'TGWTaggerStateMachineRole.Arn'
+      LoggingConfiguration:
+        Destinations:
+          - CloudWatchLogsLogGroup: 
+              LogGroupArn: !GetAtt 'TGWTaggerStateMachineLogGroup.Arn'
+        IncludeExecutionData: False
+        Level: ALL
       DefinitionString:
         Fn::Sub: |-
           {
