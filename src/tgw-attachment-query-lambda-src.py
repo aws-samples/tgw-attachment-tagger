@@ -28,7 +28,7 @@ REGION_LIST = os.environ.get('REGION_LIST').split(",")
 ORIGINAL_TGW_LIST = os.environ.get('TGW_LIST')
 
 if not REGION_LIST:
-    raise RuntimeError("At least one region must be specified")
+    raise RuntimeError("Environment Variable REGION_LIST is empty - At least one region must be specified")
 
 if ORIGINAL_TGW_LIST:
     tgw_list = ORIGINAL_TGW_LIST.split(",")
