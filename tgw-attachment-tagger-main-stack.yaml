@@ -300,7 +300,7 @@ Resources:
           ORIGINAL_TGW_LIST = os.environ.get('TGW_LIST')
 
           if not REGION_LIST:
-              raise RuntimeError(f"At least one region must be specified")
+              raise RuntimeError("At least one region must be specified")
 
           if ORIGINAL_TGW_LIST:
               tgw_list = ORIGINAL_TGW_LIST.split(",")
