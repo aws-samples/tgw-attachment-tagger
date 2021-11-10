@@ -101,7 +101,7 @@ Resources:
       FunctionName: tgw-tagger-organizations-account-query
       Description: Queries the AWS Organizations API in the Organization Root for account Ids and Names
       Handler: index.lambda_handler
-      Runtime: python3.8
+      Runtime: python3.9
       Role: !GetAtt 'LambdaOrganizationsAccountQueryRole.Arn'
       Timeout: 60
       MemorySize: 128
@@ -258,7 +258,7 @@ Resources:
       FunctionName: tgw-tagger-attachment-query
       Description: Queries the EC2 API for TGW attachment Ids
       Handler: index.lambda_handler
-      Runtime: python3.8
+      Runtime: python3.9
       Role: !GetAtt 'LambdaTGWAttachmentQueryRole.Arn'
       Timeout: 900
       MemorySize: 128
@@ -437,7 +437,7 @@ Resources:
       FunctionName: tgw-tagger-rtb-query
       Description: Queries the EC2 API for TGW Route Table CIDR entries
       Handler: index.lambda_handler
-      Runtime: python3.8
+      Runtime: python3.9
       Role: !GetAtt 'LambdaTGWRTBQueryRole.Arn'
       Timeout: 900
       MemorySize: 128
@@ -621,7 +621,7 @@ Resources:
       FunctionName: tgw-tagger-tagger
       Description: Updates the TGW Attachment Name tag
       Handler: index.lambda_handler
-      Runtime: python3.8
+      Runtime: python3.9
       Role: !GetAtt 'LambdaTGWTagRole.Arn'
       Timeout: 60
       MemorySize: 128
