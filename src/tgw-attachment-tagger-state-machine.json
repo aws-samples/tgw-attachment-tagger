@@ -1,0 +1,133 @@
+{
+    "Comment": "A state machine to orchestrate the tagging of transit gateway attachments",
+    "StartAt": "get-account-data",
+    "States": {
+
+        "get-account-data": {
+            "Type": "Task",
+            "Resource": "${LambdaOrganizationsAccountQuery.Arn}",
+            "Retry": [ {
+                "ErrorEquals": [ "Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+                "IntervalSeconds": 2,
+                "MaxAttempts": 3,
+                "BackoffRate": 2
+            } ],
+            "Catch": [ {
+                "ErrorEquals": [ "States.ALL" ],
+                "Next": "get-account-data-failure",
+                "ResultPath": "$.RuntimeError"
+            } ],  
+            "Next": "get-tgw-attachments"
+        },
+
+        "get-account-data-failure": {
+            "Type": "Pass",
+            "Result": "Error retrieving account data from AWS Organizations",
+            "ResultPath": "$.FailureReason",
+            "Next": "failed"
+        },    
+
+        "get-tgw-attachments": {
+            "Type": "Task",
+            "Resource": "${LambdaTGWAttachmentQuery.Arn}",
+            "Retry": [ {
+                "ErrorEquals": [ "Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+                "IntervalSeconds": 2,
+                "MaxAttempts": 3,
+                "BackoffRate": 2
+            } ],
+            "Catch": [ {
+                "ErrorEquals": [ "States.ALL" ],
+                "Next": "get-tgw-attachments-failure",
+                "ResultPath": "$.RuntimeError"
+            } ],  
+            "Next": "process-regions-map"
+        },
+
+        "get-tgw-attachments-failure": {
+            "Type": "Pass",
+            "Result": "Error retrieving TGW Attachments",
+            "ResultPath": "$.FailureReason",
+            "Next": "failed"
+        },   
+
+        "process-regions-map": {
+            "Type": "Map",
+            "ItemsPath": "$.MapInput",
+            "MaxConcurrency": 0,
+            "Iterator": {
+                "StartAt": "get-tgw-attachment-cidr",
+                "States": {
+
+                    "get-tgw-attachment-cidr": {
+                        "Type": "Task",
+                        "Resource": "${LambdaTGWRTBQuery.Arn}",
+                        "Retry": [ {
+                            "ErrorEquals": [ "Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+                            "IntervalSeconds": 2,
+                            "MaxAttempts": 3,
+                            "BackoffRate": 2
+                        } ],
+                        "Catch": [ {
+                            "ErrorEquals": [ "States.ALL" ],
+                            "Next": "get-tgw-attachment-cidr-failure",
+                            "ResultPath": "$.RuntimeError"
+                        } ],  
+                        "Next": "tag-tgw-attachments"
+                    },
+
+                    "get-tgw-attachment-cidr-failure": {
+                        "Type": "Pass",
+                        "Result": "Error getting TGW attachment CIDR ranges",
+                        "ResultPath": "$.FailureReason",
+                        "Next": "map-failed"
+                    },   
+
+                    "tag-tgw-attachments": {
+                        "Type": "Task",
+                        "Resource": "${LambdaTGWTag.Arn}",
+                        "Retry": [ {
+                            "ErrorEquals": [ "Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+                            "IntervalSeconds": 2,
+                            "MaxAttempts": 3,
+                            "BackoffRate": 2
+                        } ],
+                        "Catch": [ {
+                            "ErrorEquals": [ "States.ALL" ],
+                            "Next": "tag-tgw-attachments-failure",
+                            "ResultPath": "$.RuntimeError"
+                        } ],  
+                        "Next": "map-success"
+                    },
+
+                    "tag-tgw-attachments-failure": {
+                        "Type": "Pass",
+                        "Result": "Error applying tags to TGW attachments",
+                        "ResultPath": "$.FailureReason",
+                        "Next": "map-failed"
+                    },   
+
+                    "map-success": {
+                        "Type": "Pass",
+                        "End": true
+                    },
+                    
+                    "map-failed": {
+                        "Type": "Fail"
+                    }
+
+                }
+            },
+            "Next": "success"
+        },
+
+        "success": {
+            "Type": "Succeed"
+        },
+  
+        "failed": {
+            "Type": "Fail"
+        }
+
+    }
+}

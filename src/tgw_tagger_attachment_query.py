@@ -14,15 +14,17 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-import boto3
+import boto3 # type: ignore
 import logging
 import sys
 import traceback
 import os
 import json
+from aws_lambda_powertools import Tracer # type: ignore
+from aws_lambda_powertools import Logger # type: ignore
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+tracer = Tracer(service="tgw-tagger-attachment-query")
+logger = Logger(service="tgw-tagger-attachment-query")
 
 REGION_LIST = os.environ.get('REGION_LIST').split(",")
 ORIGINAL_TGW_LIST = os.environ.get('TGW_LIST')
@@ -35,18 +37,31 @@ if ORIGINAL_TGW_LIST:
 else:
     tgw_list = []
 
-def log_exception(exception_type, exception_value, exception_traceback):
-    """Function to create a JSON object containing exception details, which can then be logged as one line to the logger."""
-    traceback_string = traceback.format_exception(exception_type, exception_value, exception_traceback)
-    err_msg = json.dumps({"errorType": exception_type.__name__, "errorMessage": str(exception_value), "stackTrace": traceback_string})
-    logger.error(err_msg)
-
+@tracer.capture_method
 def get_ec2_client(region: str):
-    """Create a regional EC2 boto client."""
+    """
+    Create a regional EC2 boto client
+    
+    Parameters: 
+        region (str): the AWS region where the client should be created
+    
+    Returns:
+        boto3 ec2 client for the target region
+    """
     return boto3.client('ec2', region_name=region)
     
-def list_transit_gateway_attachments(accountList: list, region: str):
-    """Returns all TGW attachments for the specified Region."""
+@tracer.capture_method
+def list_transit_gateway_attachments(account_list: list, region: str):
+    """
+    Returns all TGW attachments for the specified Region
+    
+    Parameters:
+        account_list (list): List containing dictionaries of account IDs and their Name
+        region (str): The AWS region to process
+    
+    Returns:
+        result_object (list): List of dictionaries with TGW attachment data including the owning account name    
+    """
     logger.info(f"Getting list of TGW Attachments for region {region}")
     ec2 = get_ec2_client(region)
     result_object = []
@@ -70,8 +85,9 @@ def list_transit_gateway_attachments(accountList: list, region: str):
             ] 
         )
     except:
-        log_exception(*sys.exc_info())
+        logger.exception(f"Error getting list of TGW attachments for region {region}")
         raise RuntimeError(f"Error getting list of TGW attachments for region {region}")
+
     for page in iterator:
         for attachment in page['TransitGatewayAttachments']:
             # Check TGW has not been excluded from processing
@@ -84,16 +100,32 @@ def list_transit_gateway_attachments(accountList: list, region: str):
                         tgw_name = i['Value']   
                 account_name = "MISSING"
                 # Check account list object for a match against the TGW resource owner
-                for account in [x for x in accountList if x['id'] == attachment['ResourceOwnerId']]:
+                for account in [x for x in account_list if x['id'] == attachment['ResourceOwnerId']]:
                     account_name = account['name']           
-                result_object.append({"tgwId": attachment['TransitGatewayId'], "attachmentId": attachment['TransitGatewayAttachmentId'], "accountId": attachment['ResourceOwnerId'],"accountName": account_name, "nametag": tgw_name})
+                result_object.append(
+                    {
+                        "tgwId": attachment['TransitGatewayId'], 
+                        "attachmentId": attachment['TransitGatewayAttachmentId'], 
+                        "accountId": attachment['ResourceOwnerId'],
+                        "accountName": account_name, 
+                        "nametag": tgw_name
+                    }
+                )
     return result_object
 
+@tracer.capture_lambda_handler
+@logger.inject_lambda_context(log_event=True)
 def lambda_handler(event, context):
     """
-    Lambda handler function. 
+    Queries the EC2 API for Transit Gateway Attachment details for each configured region, 
+    before returning a dictionary of lists with TGW attachment information.
     
-    Queries the EC2 API for Transit Gateway Attachment details for each configured region, before returning a dictionary of lists with TGW attachment information.
+    Parameters:
+        event (dict): The Lambda event object
+        context (dict): The Lambda context object   
+    
+    Returns:
+        response_data (dict): Dictionary containing a list of the TGW attachments for each processed region
     """
     response_data = {}
     response_data['MapInput'] = []
@@ -101,5 +133,9 @@ def lambda_handler(event, context):
         for region in REGION_LIST:
             logger.info(f"Processing Region: {region}")
             result = list_transit_gateway_attachments(event['AccountDetails'], region)
-            response_data['MapInput'].append({region: result}) 
+            response_data['MapInput'].append(
+                {
+                    region: result
+                }
+            ) 
     return(response_data)

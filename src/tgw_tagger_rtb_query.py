@@ -14,29 +14,42 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-import boto3
+import boto3 # type: ignore
 import logging
 import sys
 import traceback
 import os
 import json
+from aws_lambda_powertools import Tracer # type: ignore
+from aws_lambda_powertools import Logger # type: ignore
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+tracer = Tracer(service="tgw_tagger_rtb_query")
+logger = Logger(service="tgw_tagger_rtb_query")
 
-def log_exception(exception_type, exception_value, exception_traceback):
-    """Function to create a JSON object containing exception details, which can then be logged as one line to the logger."""
-    traceback_string = traceback.format_exception(exception_type, exception_value, exception_traceback)
-    err_msg = json.dumps({"errorType": exception_type.__name__, "errorMessage": str(exception_value), "stackTrace": traceback_string})
-    logger.error(err_msg)
-
+@tracer.capture_method
 def get_ec2_client(region: str):
-    """Create a regional EC2 boto client."""
-    ec2 = boto3.client('ec2', region_name=region)
-    return ec2
+    """
+    Create a regional EC2 boto client
+    
+    Parameters: 
+        region (str): the AWS region where the client should be created
+    
+    Returns:
+        boto3 ec2 client for the target region
+    """
+    return boto3.client('ec2', region_name=region)
 
+@tracer.capture_method
 def list_tgw_route_tables(region: str):
-    """Get TGW RTB for the specified Region."""
+    """
+    Returns the TGW route tables for the supplied region
+
+    Parameters:
+        region (str): The AWS region to process
+
+    Returns:
+        result_object (list): List of TGW route tables (dict inc TGW and RTB IDs)
+    """
     ec2 = get_ec2_client(region)    
     result_object = []
     try:
@@ -51,28 +64,59 @@ def list_tgw_route_tables(region: str):
                 },
             ] 
         )
-        for page in iterator:
-            for rtb in page['TransitGatewayRouteTables']:
-                result_object.append({"tgwId": rtb['TransitGatewayId'], "rtbId": rtb['TransitGatewayRouteTableId']})
     except:
-        log_exception(*sys.exc_info())   
+        logger.exception(f"Error getting TGW RTB for region {region}")  
         raise RuntimeError(f"Error getting TGW RTB for region {region}")    
+    for page in iterator:
+        for rtb in page['TransitGatewayRouteTables']:
+            result_object.append(
+                {
+                    "tgwId": rtb['TransitGatewayId'], 
+                    "rtbId": rtb['TransitGatewayRouteTableId']
+                }
+            )
     return result_object
 
+@tracer.capture_method
 def find_tgw_attachment_cidr(attachment_id: str, route_table_list: list, region: str):
-    """Get CIDR for TGW Attachment."""
+    """
+    Returns the cidr range for a TGW attachment
+
+    Parameters:
+        attachment_id (str): The TGW attachment ID
+        route_table_list (list): The list of route table information
+        region (str): The AWS region to process
+    
+    Returns:
+        Either the TGW cidr as a string or None
+    """
     result_object = []
     for route_table in route_table_list:
         cidr_range = search_rtb_for_attachment(attachment_id, route_table['rtbId'], region)
         if cidr_range:
-            result_object.append({"cidr": cidr_range})
+            result_object.append(
+                {
+                    "cidr": cidr_range
+                }
+            )
     if len(result_object) == 1:
         return result_object[0]['cidr']
     else:
         return None
 
+@tracer.capture_method
 def search_rtb_for_attachment(attachment_id: str, route_table_id: str, region: str):
-    """Search RTB for TGW Attachment."""
+    """
+    Searches RTB for the TGW Attachment ID
+
+    Parameters:
+        attachment_id (str): The TGW attachment ID
+        route_table_id (str): The Route Table ID
+        region (str): The AWS region to process
+    
+    Returns:
+        result_object: Either the CIDR block as a string or None    
+    """
     ec2 = get_ec2_client(region)
     result_object = None
     try:
@@ -88,7 +132,7 @@ def search_rtb_for_attachment(attachment_id: str, route_table_id: str, region: s
             ]
         )
     except:
-        log_exception(*sys.exc_info())
+        logger.exception(f"Error searching TGW Route Table: {route_table_id}") 
         raise RuntimeError(f"Error searching TGW Route Table: {route_table_id}")
     if response['Routes']:
         # An attachment may only be associated with a single Route Table, however the API returns a list containing a single element
@@ -96,20 +140,26 @@ def search_rtb_for_attachment(attachment_id: str, route_table_id: str, region: s
             result_object = route['DestinationCidrBlock']
     return result_object
 
+@tracer.capture_lambda_handler
+@logger.inject_lambda_context(log_event=True)
 def lambda_handler(event, context):
     """
-    Lambda handler function. 
-    
     Queries the TGW route tables for the supplied region, to find out the CIDR range associated with the attachment
+
+    Parameters:
+        event (dict): The Lambda event object
+        context (dict): The Lambda context object   
+    
+    Returns:
+        event (dict): Updated event object, with the TGW Attachment CIDR if available
     """
-    logger.debug(f"{event}")
     # Get the next item in the supplied dictionary. The Map iterator in the surrounding Step Function will supply a single region at a time to this function - however we do not know which at runtime
     map_region = next(iter(event))
     rtb = list_tgw_route_tables(map_region)
     for a in event[map_region]:
         logger.info(f"Processing attachment {a['attachmentId']}")
         cidr = find_tgw_attachment_cidr(a['attachmentId'], rtb, map_region)
-        if None is not cidr:
+        if cidr:
             a['cidr'] = cidr
         else:
             a['cidr'] = "MISSING"
