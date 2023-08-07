@@ -108,7 +108,7 @@ Resources:
       FunctionName: tgw-tagger-organizations-account-query
       Description: Queries the AWS Organizations API in the Organization Root for account Ids and Names
       Handler: index.lambda_handler
-      Runtime: python3.9
+      Runtime: python3.10
       Role: !GetAtt 'LambdaOrganizationsAccountQueryRole.Arn'
       Timeout: 60
       MemorySize: 256
@@ -118,7 +118,7 @@ Resources:
       TracingConfig:
         Mode: Active
       Layers:
-        - !Sub "arn:aws:lambda:${AWS::Region}:017000801446:layer:AWSLambdaPowertoolsPython:7"
+        - !Sub "arn:aws:lambda:${AWS::Region}:017000801446:layer:AWSLambdaPowertoolsPythonV2:40"
       Code:
         ZipFile: |
           # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
@@ -300,7 +300,7 @@ Resources:
       FunctionName: tgw-tagger-attachment-query
       Description: Queries the EC2 API for TGW attachment Ids
       Handler: index.lambda_handler
-      Runtime: python3.9
+      Runtime: python3.10
       Role: !GetAtt 'LambdaTGWAttachmentQueryRole.Arn'
       Timeout: 900
       MemorySize: 512
@@ -311,7 +311,7 @@ Resources:
       TracingConfig:
         Mode: Active
       Layers:
-        - !Sub "arn:aws:lambda:${AWS::Region}:017000801446:layer:AWSLambdaPowertoolsPython:7"
+        - !Sub "arn:aws:lambda:${AWS::Region}:017000801446:layer:AWSLambdaPowertoolsPythonV2:40"
       Code:
         ZipFile: |
           # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
@@ -522,14 +522,14 @@ Resources:
       FunctionName: tgw-tagger-rtb-query
       Description: Queries the EC2 API for TGW Route Table CIDR entries
       Handler: index.lambda_handler
-      Runtime: python3.9
+      Runtime: python3.10
       Role: !GetAtt 'LambdaTGWRTBQueryRole.Arn'
       Timeout: 900
       MemorySize: 512
       TracingConfig:
         Mode: Active
       Layers:
-        - !Sub "arn:aws:lambda:${AWS::Region}:017000801446:layer:AWSLambdaPowertoolsPython:7"
+        - !Sub "arn:aws:lambda:${AWS::Region}:017000801446:layer:AWSLambdaPowertoolsPythonV2:40"
       Code:
         ZipFile: |
           # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
@@ -765,14 +765,14 @@ Resources:
       FunctionName: tgw-tagger-attachment-tagger
       Description: Updates the TGW Attachment Name tag
       Handler: index.lambda_handler
-      Runtime: python3.9
+      Runtime: python3.10
       Role: !GetAtt 'LambdaTGWTagRole.Arn'
       Timeout: 60
       MemorySize: 128
       TracingConfig:
         Mode: Active
       Layers:
-        - !Sub "arn:aws:lambda:${AWS::Region}:017000801446:layer:AWSLambdaPowertoolsPython:7"
+        - !Sub "arn:aws:lambda:${AWS::Region}:017000801446:layer:AWSLambdaPowertoolsPythonV2:40"
       Code:
         ZipFile: |
           # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
