@@ -22,9 +22,8 @@ Parameters:
   NetworkingAccountId:
     Description: The AWS Account Id which contains the TGW Attachment Tagger
     Type: String
-    Default: "123456789012"
     AllowedPattern: "\\d{12}"
-    ConstraintDescription: Enter a valid AWS Account Id
+    ConstraintDescription: Enter a valid AWS Account Id (12 digits)
 
 Resources:
 
